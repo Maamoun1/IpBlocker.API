@@ -13,7 +13,6 @@
   <ItemGroup>
     <Folder Include="BackgroundServices\" />
     <Folder Include="Controllers\" />
-    <Folder Include="ExternalServices\" />
     <Folder Include="Common\" />
     <Folder Include="Services\" />
   </ItemGroup>
