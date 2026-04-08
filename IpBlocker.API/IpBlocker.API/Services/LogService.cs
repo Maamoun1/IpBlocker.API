@@ -4,10 +4,7 @@ using IpBlocker.API.Repositories;
 
 namespace IpBlocker.API.Services;
 
-/// <summary>
-/// Manages audit log storage and retrieval.
-/// DI Lifetime: Scoped.
-/// </summary>
+
 public class LogService : ILogService
 {
     private readonly ILogRepository _logRepo;
@@ -60,7 +57,4 @@ public class LogService : ILogService
         });
     }
 }
-ENDOFFILE
-Output
 
-exit code 0
