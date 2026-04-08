@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace IpBlocker.API.Controllers;
 
+/// <summary>
+/// Handles IP geolocation lookup and block-check endpoints.
+/// </summary>
 [ApiController]
 [Route("api/ip")]
 [Produces("application/json")]
@@ -18,8 +21,14 @@ public class IpController : ControllerBase
         _logger = logger;
     }
 
-    // ─── Endpoint 4: IP Lookup ───────────────────────────────────────────────
-
+    /// <summary>
+    /// Looks up geolocation information for an IP address.
+    /// If ipAddress is omitted, uses the caller's IP automatically.
+    /// </summary>
+    /// <param name="ipAddress">Optional IP to look up. Defaults to caller's IP.</param>
+    /// <response code="200">Geolocation data returned successfully.</response>
+    /// <response code="400">The provided IP address format is invalid.</response>
+    /// <response code="502">Geolocation service is unavailable or returned an error.</response>
     [HttpGet("lookup")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -51,8 +60,11 @@ public class IpController : ControllerBase
         return Ok(result.Data);
     }
 
-    // ─── Endpoint 5: Check If Caller Is Blocked ──────────────────────────────
-
+    /// <summary>
+    /// Checks whether the caller's IP address originates from a blocked country.
+    /// Always returns 200 — check IsBlocked in the response body.
+    /// </summary>
+    /// <response code="200">Check completed. See IsBlocked field in response.</response>
 
     [HttpGet("check-block")]
     [ProducesResponseType(StatusCodes.Status200OK)]

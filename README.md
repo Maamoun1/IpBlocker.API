@@ -162,7 +162,7 @@ Expected business outcomes (duplicate, not found) aren't exceptional. `ServiceRe
 Different lifecycles, different cleanup rules. Mixing them into one model creates hidden conditional logic.
 
 **Why `PeriodicTimer` in the background service?**
-Unlike `Task.Delay`, `PeriodicTimer` doesn't drift — cleanup time is not added to the interval.
+`PeriodicTimer` ensures consistent cleanup intervals
 
 **Why `IHttpClientFactory` instead of `new HttpClient()`?**
 `new HttpClient()` causes socket exhaustion under load. The factory manages connection pooling with proper `HttpMessageHandler` lifetime rotation.
@@ -203,3 +203,7 @@ curl -X POST http://localhost:5000/api/countries/temporal-block \
 # 6. View audit logs
 curl http://localhost:5000/api/logs/blocked-attempts
 ```
+---
+## 👤 Author
+**Maamoun Ibrahim** Junior Backend Developer | .NET 8 Enthusiast  
+[https://github.com/Maamoun1]
