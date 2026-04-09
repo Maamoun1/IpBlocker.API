@@ -1,14 +1,21 @@
-﻿using System.Text.Json;
-using IpBlocker.API.Common;
+﻿using IpBlocker.API.Common;
 using Microsoft.Extensions.Options;
+using System;
+using System.Diagnostics;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Runtime;
+using System.Text.Json;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace IpBlocker.API.ExternalServices;
+
 public class GeoLocationApiClient : IGeoLocationApiClient
 {
     private readonly HttpClient _httpClient;
     private readonly GeoLocationApiSettings _settings;
     private readonly ILogger<GeoLocationApiClient> _logger;
-
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -24,9 +31,6 @@ public class GeoLocationApiClient : IGeoLocationApiClient
         _settings = settings.Value;
         _logger = logger;
 
-    
-        _httpClient.BaseAddress = new Uri(_settings.BaseUrl);
-        _httpClient.Timeout = TimeSpan.FromSeconds(10); // Don't wait forever
     }
 
     public async Task<GeoLocationApiResponse?> GetLocationAsync(
@@ -35,20 +39,42 @@ public class GeoLocationApiClient : IGeoLocationApiClient
     {
         try
         {
-         
-            var url = string.IsNullOrWhiteSpace(_settings.ApiKey)
-                ? $"{ipAddress}/json/"
-                : $"{ipAddress}/json/?key={_settings.ApiKey}";
+            // BaseUrl in appsettings.json = "https://ipapi.co/"
+            // Result for "8.8.8.8"       = "https://ipapi.co/8.8.8.8/json/"
+            var baseUrl = _settings.BaseUrl.TrimEnd('/');
+            var absoluteUrl = string.IsNullOrWhiteSpace(_settings.ApiKey)
+                ? $"{baseUrl}/{ipAddress}/json/"
+                : $"{baseUrl}/{ipAddress}/json/?key={_settings.ApiKey}";
 
-            _logger.LogInformation("Calling ipapi.co for IP: {IpAddress}", ipAddress);
+            _logger.LogInformation(
+                "Calling ipapi.co for IP: {IpAddress}, URL: {Url}",
+                ipAddress, absoluteUrl);
 
-            var response = await _httpClient.GetAsync(url, ct);
+            var response = await _httpClient.GetAsync(absoluteUrl, ct);
+
+            // Handle known ipapi.co error status codes explicitly
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                _logger.LogWarning(
+                    "ipapi.co rate limit hit for IP {IpAddress}. Free tier = 1000 req/day.",
+                    ipAddress);
+                return null;
+            }
+
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                _logger.LogError(
+                    "ipapi.co returned 403 Forbidden for IP {IpAddress}. " +
+                    "Check your API key in appsettings.json → GeoLocationApi:ApiKey.",
+                    ipAddress);
+                return null;
+            }
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
                     "ipapi.co returned {StatusCode} for IP {IpAddress}",
-                    response.StatusCode, ipAddress);
+                    (int)response.StatusCode, ipAddress);
                 return null;
             }
 
@@ -56,7 +82,7 @@ public class GeoLocationApiClient : IGeoLocationApiClient
 
             var result = JsonSerializer.Deserialize<GeoLocationApiResponse>(content, _jsonOptions);
 
-           
+            // ipapi.co returns HTTP 200 with error:true in the body for invalid IPs
             if (result?.Error == true)
             {
                 _logger.LogWarning(
@@ -65,24 +91,35 @@ public class GeoLocationApiClient : IGeoLocationApiClient
                 return null;
             }
 
+            _logger.LogInformation(
+                "Lookup succeeded: {IpAddress} → {CountryCode} ({CountryName})",
+                ipAddress, result?.CountryCode, result?.CountryName);
+
             return result;
         }
-        catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
-            // Timeout — the request took longer than 10 seconds
-            _logger.LogError("ipapi.co request timed out for IP: {IpAddress}", ipAddress);
+            _logger.LogError(
+                "ipapi.co request timed out for IP: {IpAddress}", ipAddress);
+            return null;
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogInformation(
+                "Request cancelled by caller for IP: {IpAddress}", ipAddress);
             return null;
         }
         catch (HttpRequestException ex)
         {
-            // Network-level failure (DNS, connection refused, etc.)
-            _logger.LogError(ex, "HTTP error calling ipapi.co for IP: {IpAddress}", ipAddress);
+            _logger.LogError(ex,
+                "Network error calling ipapi.co for IP {IpAddress}.", ipAddress);
             return null;
         }
         catch (Exception ex)
         {
-            // Catch-all — never let external API failures crash our application
-            _logger.LogError(ex, "Unexpected error calling ipapi.co for IP: {IpAddress}", ipAddress);
+            _logger.LogError(ex,
+                "Unexpected error calling ipapi.co for IP {IpAddress}. Type: {Type}",
+                ipAddress, ex.GetType().Name);
             return null;
         }
     }
